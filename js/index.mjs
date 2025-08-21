@@ -1,3 +1,4 @@
+import * as playcanvasCustom from '../vendor/playcanvas-custom.min.mjs';
 import * as playcanvasStable_min from './playcanvas-stable.min.mjs';
 import { FILLMODE_NONE, FILLMODE_KEEP_ASPECT, AppBase, createGraphicsDevice, AppOptions, RigidBodyComponentSystem, CollisionComponentSystem, JointComponentSystem, AnimationComponentSystem, AnimComponentSystem, ModelComponentSystem, RenderComponentSystem, CameraComponentSystem, LightComponentSystem, ScriptComponentSystem, SoundComponentSystem, AudioListenerComponentSystem, ParticleSystemComponentSystem, ScreenComponentSystem, ElementComponentSystem, ButtonComponentSystem, ScrollViewComponentSystem, ScrollbarComponentSystem, SpriteComponentSystem, LayoutGroupComponentSystem, LayoutChildComponentSystem, ZoneComponentSystem, GSplatComponentSystem, RenderHandler, AnimationHandler, AnimClipHandler, AnimStateGraphHandler, ModelHandler, MaterialHandler, TextureHandler, TextHandler, JsonHandler, AudioHandler, ScriptHandler, SceneHandler, CubemapHandler, HtmlHandler, CssHandler, ShaderHandler, HierarchyHandler, FolderHandler, FontHandler, BinaryHandler, TextureAtlasHandler, SpriteHandler, TemplateHandler, ContainerHandler, GSplatHandler, ElementInput, Keyboard, Mouse, GamePads, platform, TouchDevice, SoundManager, Lightmapper, BatchManager, XrManager } from './playcanvas-stable.min.mjs';
 import { loadModules } from './__modules__.mjs';
@@ -239,7 +240,7 @@ function configure() {
             // ---- KTX2 / ASTC enable + hard remap ----
             console.log('[KTX2] Starting KTX2 remapping...');
             (function installKtx2Remap(app) {
-                const pc = playcanvasStable_min; // Use imported module
+                const pc = playcanvasCustom; // Use custom engine with KTX2 support
                 const gd = app.graphicsDevice;
                 const gl = gd.gl;
                 

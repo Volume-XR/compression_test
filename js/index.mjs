@@ -267,10 +267,12 @@ function configure() {
                     return;
                 }
 
-                if (!astcOK) {
-                    console.warn('[KTX2] No ASTC support on this device. Staying on WebP.');
-                    return;
-                }
+                // DISABLED: Force KTX2 usage even without ASTC support for testing
+                // if (!astcOK) {
+                //     console.warn('[KTX2] No ASTC support on this device. Staying on WebP.');
+                //     return;
+                // }
+                console.warn('[KTX2] ASTC check disabled - forcing KTX2 usage. ASTC support:', astcOK);
 
                 // 2) Remap: find texture assets by their current filename and swap to .ktx2
                 const KTX2_BASE = 'files/assets/astc6x6';

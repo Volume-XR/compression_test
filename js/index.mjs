@@ -382,11 +382,67 @@ async function main() {
         const device = await createLocalGraphicsDevice();
         if (initApp(device)) {
             await loadModules(PRELOAD_MODULES, ASSET_PREFIX);
+            
+            // Hook into asset loading BEFORE configure
+            setupKtx2Remapping();
+            
             configure();
         }
     } catch (e) {
         console.error('Device creation error:', e);
     }
+}
+
+function setupKtx2Remapping() {
+    console.log('[KTX2] Setting up asset remapping hook...');
+    
+    const pc = playcanvasCustom;
+    if (!pc.Ktx2Parser) {
+        console.warn('[KTX2] Ktx2Parser not found - WebP will be used');
+        return;
+    }
+    
+    // Hook into the asset registry's add function to remap URLs
+    const originalAdd = app.assets.add.bind(app.assets);
+    app.assets.add = function(asset) {
+        if (asset.type === 'texture' && asset.file) {
+            const remapTable = {
+                'means_l.webp': 'files/assets/astc6x6/means_l.ktx2',
+                'means_u.webp': 'files/assets/astc6x6/means_u.ktx2',
+                'quats.webp': 'files/assets/astc6x6/quats.ktx2',
+                'scales.webp': 'files/assets/astc6x6/scales.ktx2',
+                'sh0.webp': 'files/assets/astc6x6/sh0.ktx2',
+                'shN_centroids.webp': 'files/assets/astc6x6/shN_centroids.ktx2',
+                'shN_labels.webp': 'files/assets/astc6x6/shN_labels.ktx2'
+            };
+            
+            for (const [webpName, ktx2Path] of Object.entries(remapTable)) {
+                if (asset.file.filename === webpName || asset.file.url.includes(webpName)) {
+                    console.log(`[KTX2] Remapping ${asset.name} from ${asset.file.url} to ${ktx2Path}`);
+                    asset.file.url = ktx2Path;
+                    asset.file.filename = ktx2Path.split('/').pop();
+                    break;
+                }
+            }
+        }
+        return originalAdd(asset);
+    };
+    
+    // Register KTX2 parser
+    const gd = app.graphicsDevice;
+    const texHandler = app.loader.getHandler('texture');
+    const parser = new pc.Ktx2Parser(gd);
+    
+    if (texHandler.parsers && Array.isArray(texHandler.parsers)) {
+        texHandler.parsers.unshift(parser);
+    } else if (texHandler._parsers && Array.isArray(texHandler._parsers)) {
+        texHandler._parsers.unshift(parser);
+    } else {
+        // Direct assignment
+        texHandler.parsers = [parser];
+    }
+    
+    console.log('[KTX2] Parser registered and asset remapping hook installed');
 }
 main();
 // The `pc.script.createLoadingScreen()` in `__loading__.js` is invoked immediately 

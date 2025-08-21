@@ -261,15 +261,31 @@ function configure() {
                 console.log('[KTX2] pc.Ktx2Parser found, registering...');
                 const texHandler = app.loader.getHandler('texture');
                 const parser = new pc.Ktx2Parser(gd);
-                if (texHandler.addParser) {
+                
+                // Debug what's available
+                console.log('[KTX2] texHandler methods:', Object.keys(texHandler).filter(k => typeof texHandler[k] === 'function'));
+                console.log('[KTX2] texHandler.parsers type:', typeof texHandler.parsers, texHandler.parsers);
+                
+                if (texHandler.addParser && typeof texHandler.addParser === 'function') {
                     texHandler.addParser(parser);
                     console.log('[KTX2] Parser added via addParser');
-                } else if (texHandler.parsers) {
+                } else if (texHandler.parsers && Array.isArray(texHandler.parsers)) {
                     texHandler.parsers.unshift(parser);
-                    console.log('[KTX2] Parser added via parsers.unshift');
+                    console.log('[KTX2] Parser added via parsers array');
+                } else if (texHandler._parsers && Array.isArray(texHandler._parsers)) {
+                    texHandler._parsers.unshift(parser);
+                    console.log('[KTX2] Parser added via _parsers array');
                 } else {
-                    console.error('[KTX2] Could not add parser - no addParser method or parsers array!');
-                    return;
+                    // Try direct assignment as fallback
+                    console.warn('[KTX2] Standard parser registration failed, attempting direct override');
+                    if (texHandler.parsers) {
+                        texHandler.parsers = [parser];
+                    } else if (texHandler._parsers) {
+                        texHandler._parsers = [parser];
+                    } else {
+                        console.error('[KTX2] Could not add parser - no suitable method found!');
+                        return;
+                    }
                 }
 
                 // DISABLED: Force KTX2 usage even without ASTC support for testing

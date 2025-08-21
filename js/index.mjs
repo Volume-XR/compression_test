@@ -402,6 +402,37 @@ function setupKtx2Remapping() {
         return;
     }
     
+    // First, register KTX2 parser BEFORE any hooks
+    const gd = app.graphicsDevice;
+    const texHandler = app.loader.getHandler('texture');
+    const parser = new pc.Ktx2Parser(gd);
+    
+    // Force the parser to be first
+    if (!texHandler.parsers) {
+        texHandler.parsers = [];
+    }
+    if (Array.isArray(texHandler.parsers)) {
+        // Remove any existing KTX2 parser
+        texHandler.parsers = texHandler.parsers.filter(p => !(p instanceof pc.Ktx2Parser));
+        // Add our parser first
+        texHandler.parsers.unshift(parser);
+    }
+    
+    console.log('[KTX2] Parser registered. Parsers available:', texHandler.parsers.length);
+    
+    // Override the texture handler's load method to use KTX2 parser for .ktx2 files
+    const originalLoad = texHandler.load.bind(texHandler);
+    texHandler.load = function(url, callback, asset) {
+        if (url && (url.original || url.load || url).includes('.ktx2')) {
+            console.log('[KTX2] Loading KTX2 file:', url.original || url.load || url);
+            // Use KTX2 parser directly
+            parser.load(url, callback, asset);
+        } else {
+            // Use original loader
+            originalLoad(url, callback, asset);
+        }
+    };
+    
     // Hook into the asset registry's add function to remap URLs
     const originalAdd = app.assets.add.bind(app.assets);
     app.assets.add = function(asset) {
@@ -421,26 +452,14 @@ function setupKtx2Remapping() {
                     console.log(`[KTX2] Remapping ${asset.name} from ${asset.file.url} to ${ktx2Path}`);
                     asset.file.url = ktx2Path;
                     asset.file.filename = ktx2Path.split('/').pop();
+                    // Clear any cached hash to force reload
+                    if (asset.file.hash) delete asset.file.hash;
                     break;
                 }
             }
         }
         return originalAdd(asset);
     };
-    
-    // Register KTX2 parser
-    const gd = app.graphicsDevice;
-    const texHandler = app.loader.getHandler('texture');
-    const parser = new pc.Ktx2Parser(gd);
-    
-    if (texHandler.parsers && Array.isArray(texHandler.parsers)) {
-        texHandler.parsers.unshift(parser);
-    } else if (texHandler._parsers && Array.isArray(texHandler._parsers)) {
-        texHandler._parsers.unshift(parser);
-    } else {
-        // Direct assignment
-        texHandler.parsers = [parser];
-    }
     
     console.log('[KTX2] Parser registered and asset remapping hook installed');
 }

@@ -345,11 +345,21 @@ function configure() {
                 texAssets.forEach(asset => {
                     if (asset.file.url.includes('.ktx2')) {
                         asset.on('load', () => {
-                            console.log(`[KTX2] ✓ Loaded: ${asset.name} from ${asset.file.url}`);
+                            console.log(`[KTX2] ✓ Successfully loaded KTX2: ${asset.name} from ${asset.file.url}`);
                         });
                         asset.on('error', (err) => {
                             console.error(`[KTX2] ✗ Failed to load: ${asset.name}`, err);
                         });
+                    } else if (asset.file.url.includes('.webp')) {
+                        console.warn(`[KTX2] WARNING: Still loading WebP: ${asset.name} from ${asset.file.url}`);
+                    }
+                });
+                
+                // Log final asset URLs to confirm KTX2 usage
+                console.log('[KTX2] Final texture URLs after remapping:');
+                texAssets.forEach(asset => {
+                    if (asset.type === 'texture') {
+                        console.log(`  - ${asset.name}: ${asset.file.url}`);
                     }
                 });
             })(app);

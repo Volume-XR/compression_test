@@ -273,6 +273,13 @@ function configure() {
                 //     return;
                 // }
                 console.warn('[KTX2] ASTC check disabled - forcing KTX2 usage. ASTC support:', astcOK);
+                
+                // Log which path will be used
+                if (astcOK) {
+                    console.log('[KTX2] ✓ NATIVE ASTC: Hardware will decode ASTC directly (fast path)');
+                } else {
+                    console.log('[KTX2] ⚠ FALLBACK: Engine will decompress ASTC to RGBA (slow path)');
+                }
 
                 // 2) Remap: find texture assets by their current filename and swap to .ktx2
                 const KTX2_BASE = 'files/assets/astc6x6';
@@ -312,6 +319,18 @@ function configure() {
                     }
                 }
                 console.log(`[KTX2] remapped ${count} texture assets to .ktx2`);
+                
+                // Add load event listeners to verify KTX2 loading
+                texAssets.forEach(asset => {
+                    if (asset.file.url.includes('.ktx2')) {
+                        asset.on('load', () => {
+                            console.log(`[KTX2] ✓ Loaded: ${asset.name} from ${asset.file.url}`);
+                        });
+                        asset.on('error', (err) => {
+                            console.error(`[KTX2] ✗ Failed to load: ${asset.name}`, err);
+                        });
+                    }
+                });
             })(app);
             // ---- end KTX2 / ASTC block ----
             

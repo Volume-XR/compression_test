@@ -239,6 +239,10 @@ function configure() {
             
             // ---- KTX2 / ASTC enable + hard remap ----
             console.log('[KTX2] Starting KTX2 remapping...');
+            console.log('[KTX2] Checking playcanvasCustom exports:', Object.keys(playcanvasCustom).length, 'exports');
+            console.log('[KTX2] playcanvasCustom.Ktx2Parser:', !!playcanvasCustom.Ktx2Parser);
+            console.log('[KTX2] window.pc?.Ktx2Parser:', !!window.pc?.Ktx2Parser);
+            
             (function installKtx2Remap(app) {
                 const pc = playcanvasCustom; // Use custom engine with KTX2 support
                 const gd = app.graphicsDevice;

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Custom Engine KTX2 Support</title>
+</head>
+<body>
+    <h2>Testing Custom PlayCanvas Engine</h2>
+    <pre id="output"></pre>
+    
+    <script type="module">
+        const output = document.getElementById('output');
+        const log = (msg) => output.textContent += msg + '\n';
+        
+        log('Loading custom engine...');
+        
+        try {
+            // Test direct import
+            const customEngine = await import('./vendor/playcanvas-custom.min.mjs');
+            log('✓ Custom engine loaded');
+            
+            // Check what's in the module
+            log('\nChecking for Ktx2Parser:');
+            log('customEngine.Ktx2Parser exists: ' + (!!customEngine.Ktx2Parser));
+            
+            // Check default export
+            if (customEngine.default) {
+                log('customEngine.default.Ktx2Parser exists: ' + (!!customEngine.default?.Ktx2Parser));
+            }
+            
+            // List all exports
+            log('\nAll exports from custom engine:');
+            const exports = Object.keys(customEngine);
+            log('Export count: ' + exports.length);
+            
+            // Check for pc namespace
+            if (window.pc) {
+                log('\nwindow.pc found after import');
+                log('window.pc.Ktx2Parser exists: ' + (!!window.pc.Ktx2Parser));
+            }
+            
+            // Search for Ktx2 related exports
+            log('\nSearching for Ktx2 related exports:');
+            exports.filter(key => key.toLowerCase().includes('ktx')).forEach(key => {
+                log('  - ' + key);
+            });
+            
+        } catch (e) {
+            log('✗ Failed to load custom engine: ' + e.message);
+            log(e.stack);
+        }
+        
+        log('\n--- Now testing stable engine for comparison ---');
+        
+        try {
+            const stableEngine = await import('./js/playcanvas-stable.min.mjs');
+            log('✓ Stable engine loaded');
+            log('stableEngine.Ktx2Parser exists: ' + (!!stableEngine.Ktx2Parser));
+            
+        } catch (e) {
+            log('✗ Failed to load stable engine: ' + e.message);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Module Paths</title>
+</head>
+<body>
+    <h2>Testing Module Loading</h2>
+    <pre id="output"></pre>
+    
+    <script type="module">
+        const output = document.getElementById('output');
+        const log = (msg) => output.textContent += msg + '\n';
+        
+        log('Current URL: ' + window.location.href);
+        log('Base URL: ' + document.baseURI);
+        log('');
+        
+        // Test loading the modules
+        try {
+            log('Testing: import from "./js/__settings__.mjs"');
+            const module1 = await import('./js/__settings__.mjs');
+            log('✓ __settings__.mjs loaded successfully');
+        } catch (e) {
+            log('✗ Failed to load __settings__.mjs: ' + e.message);
+        }
+        
+        try {
+            log('Testing: import from "./js/__modules__.mjs"');
+            const module2 = await import('./js/__modules__.mjs');
+            log('✓ __modules__.mjs loaded successfully');
+        } catch (e) {
+            log('✗ Failed to load __modules__.mjs: ' + e.message);
+        }
+        
+        // Test the actual file paths
+        log('');
+        log('Testing fetch for file existence:');
+        
+        const testPath = async (path) => {
+            try {
+                const response = await fetch(path);
+                if (response.ok) {
+                    log(`✓ ${path} - Status: ${response.status}`);
+                } else {
+                    log(`✗ ${path} - Status: ${response.status}`);
+                }
+            } catch (e) {
+                log(`✗ ${path} - Error: ${e.message}`);
+            }
+        };
+        
+        await testPath('./js/__settings__.mjs');
+        await testPath('./js/__modules__.mjs');
+        await testPath('./js/index.mjs');
+        await testPath('./vendor/playcanvas-custom.min.mjs');
+    </script>
+</body>
+</html>

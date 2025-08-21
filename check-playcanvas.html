@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PlayCanvas Version Check</title>
+    <script type="module">
+        import * as pc from './js/playcanvas-stable.min.mjs';
+        
+        console.log("=== PlayCanvas Version Info ===");
+        console.log("pc.version:", pc.version);
+        console.log("pc.revision:", pc.revision);
+        console.log("pc.Ktx2Parser exists?", typeof pc.Ktx2Parser !== 'undefined');
+        if (typeof pc.Ktx2Parser !== 'undefined') {
+            console.log("pc.Ktx2Parser:", pc.Ktx2Parser);
+        }
+        console.log("pc.TextureParser exists?", typeof pc.TextureParser !== 'undefined');
+        console.log("pc.BasisParser exists?", typeof pc.BasisParser !== 'undefined');
+        
+        // Write results to page
+        document.addEventListener('DOMContentLoaded', () => {
+            const results = `
+PlayCanvas Version: ${pc.version || 'unknown'}
+PlayCanvas Revision: ${pc.revision || 'unknown'}
+pc.Ktx2Parser exists: ${typeof pc.Ktx2Parser !== 'undefined'}
+pc.TextureParser exists: ${typeof pc.TextureParser !== 'undefined'}
+pc.BasisParser exists: ${typeof pc.BasisParser !== 'undefined'}
+            `;
+            document.getElementById('results').textContent = results;
+        });
+    </script>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        pre { background: #f0f0f0; padding: 15px; }
+    </style>
+</head>
+<body>
+    <h1>PlayCanvas Version Check</h1>
+    <pre id="results">Loading...</pre>
+    <p>Check browser console for full details</p>
+</body>
+</html>

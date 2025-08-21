@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test ASTC Loading</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #222;
+            color: #0f0;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #0f0;
+        }
+        .error {
+            color: #f00;
+            border-color: #f00;
+        }
+        .success {
+            color: #0f0;
+            border-color: #0f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>ASTC Texture Loading Test</h1>
+    <div id="status"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function log(msg, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'status ' + (isError ? 'error' : 'success');
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + msg;
+            statusDiv.appendChild(div);
+        }
+        
+        async function testTexture(name, url) {
+            try {
+                log(`Testing ${name}: ${url}`);
+                
+                // Fetch the file
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const contentType = response.headers.get('Content-Type');
+                log(`  Content-Type: ${contentType}`);
+                
+                const buffer = await response.arrayBuffer();
+                log(`  Size: ${(buffer.byteLength / 1024).toFixed(1)} KB`);
+                
+                // Check KTX2 header
+                const view = new DataView(buffer);
+                const ktx2Magic = [
+                    0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB,
+                    0x0D, 0x0A, 0x1A, 0x0A
+                ];
+                
+                let isKTX2 = true;
+                for (let i = 0; i < ktx2Magic.length; i++) {
+                    if (view.getUint8(i) !== ktx2Magic[i]) {
+                        isKTX2 = false;
+                        break;
+                    }
+                }
+                
+                if (isKTX2) {
+                    log(`  ✓ Valid KTX2 file`);
+                } else {
+                    log(`  ✗ Not a KTX2 file (wrong magic header)`, true);
+                }
+                
+            } catch (error) {
+                log(`  ✗ Error: ${error.message}`, true);
+            }
+        }
+        
+        async function runTests() {
+            log('Starting ASTC texture tests...');
+            
+            const textures = [
+                ['means_l', '/files/assets/243326064/1/means_l.webp'],
+                ['means_u', '/files/assets/243326060/1/means_u.webp'],
+                ['scales', '/files/assets/243326065/1/scales.webp'],
+                ['quats', '/files/assets/243326059/1/quats.webp'],
+                ['sh0', '/files/assets/243326058/1/sh0.webp'],
+                ['shN_labels', '/files/assets/243326063/1/shN_labels.webp'],
+                ['shN_centroids', '/files/assets/243326202/1/shN_centroids.webp']
+            ];
+            
+            for (const [name, url] of textures) {
+                await testTexture(name, url);
+            }
+            
+            log('Tests complete!');
+        }
+        
+        runTests();
+    </script>
+</body>
+</html>

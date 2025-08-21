@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ASTC Verification</title>
+</head>
+<body>
+    <h1>ASTC Texture Verification</h1>
+    <p>Open the browser console to see the verification results.</p>
+    <p>Then visit <a href="http://localhost:9000/">the main app</a> to see if ASTC textures are loaded.</p>
+    
+    <script type="module">
+        // Import PlayCanvas
+        import * as pc from './js/playcanvas-stable.min.mjs';
+        
+        // Wait for app to be available
+        setTimeout(() => {
+            if (window.app) {
+                console.log('=== ASTC Verification ===');
+                
+                // Check ASTC support
+                const gl = app.graphicsDevice.gl;
+                const hasASTC = !!(gl.getExtension('WEBGL_compressed_texture_astc') ||
+                                   gl.getExtension('WEBKIT_WEBGL_compressed_texture_astc'));
+                console.log('ASTC Support:', hasASTC);
+                
+                // Check KTX2 parser
+                console.log('KTX2 Parser available:', !!pc.Ktx2Parser);
+                
+                // Check loaded textures
+                const textureNames = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
+                console.log('\n=== Texture Assets ===');
+                textureNames.forEach(name => {
+                    const asset = app.assets.find(name, 'texture') || 
+                                 app.assets.find(name + '.webp', 'texture');
+                    if (asset) {
+                        console.log(`${name}:`);
+                        console.log(`  URL: ${asset.file.url}`);
+                        console.log(`  Loaded: ${asset.loaded}`);
+                        if (asset.resource) {
+                            console.log(`  Format: ${asset.resource.format}`);
+                            console.log(`  Size: ${asset.resource.width}x${asset.resource.height}`);
+                        }
+                    } else {
+                        console.log(`${name}: NOT FOUND`);
+                    }
+                });
+            } else {
+                console.log('App not initialized yet. Visit http://localhost:9000/ first.');
+            }
+        }, 100);
+    </script>
+</body>
+</html>

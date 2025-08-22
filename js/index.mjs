@@ -458,6 +458,31 @@ function configure() {
                         console.error(err);
                         return;
                     }
+                    
+                    // --- Ensure 1-level compressed textures are COMPLETE on iOS/Android ---
+                    (function fixSogTextureSampling() {
+                        const names = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
+                        let fixed = 0;
+
+                        app.assets.list().forEach(a => {
+                            if (a.type !== 'texture' || !a.resource || !a.file?.url) return;
+                            const isSogKtx2 = a.file.url.endsWith('.ktx2') && names.some(n => a.file.url.includes(`/${n}.ktx2`));
+                            if (!isSogKtx2) return;
+
+                            const t = a.resource;
+                            // If there are no mipmaps, never use *MIPMAP* minFilters
+                            t.minFilter = pc.FILTER_NEAREST;   // or pc.FILTER_LINEAR if you want slight smoothing
+                            t.magFilter = pc.FILTER_NEAREST;
+                            t.addressU  = pc.ADDRESS_CLAMP_TO_EDGE;
+                            t.addressV  = pc.ADDRESS_CLAMP_TO_EDGE;
+                            t.anisotropy = 1;
+                            t.upload();
+                            fixed++;
+                        });
+
+                        console.log(`[ASTC] adjusted filters on ${fixed} textures`);
+                    })();
+                    
                     app.start();
                 });
             });

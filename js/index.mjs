@@ -262,79 +262,62 @@ function configure() {
             app.setAreaLightLuts(LTC_MAT_1, LTC_MAT_2);
         }
         
-        // ---- ASTC / KTX2 gate + remap with load hook (v2.11 handler) ----
+        // ---- ASTC / KTX2 initialization (v2.11 handler) ----
         (function () {
             window.app = app; // for debugging
 
-            // Device capability (ASTC) – skip remap when unsupported
+            // Device capability (ASTC) - required for KTX2 hardware acceleration
             const gl = app.graphicsDevice.gl;
             const astcOK = !!(gl.getExtension('WEBGL_compressed_texture_astc') ||
                             gl.getExtension('WEBKIT_WEBGL_compressed_texture_astc'));
             if (!astcOK) { 
-                console.warn('[ASTC] ext missing; staying on WebP (or launch your fallback).'); 
-                return; 
+                console.warn('[ASTC] Extension missing - KTX2 will use software decompression (slower)'); 
             }
 
-            // Parser exists in this engine; no need to add/replace
+            // Parser exists in this engine; required for KTX2
             const pc = playcanvasCustom;
             if (!pc.Ktx2Parser) { 
-                console.warn('[ASTC] Ktx2Parser missing in this build.'); 
+                console.error('[KTX2] Ktx2Parser missing in this build - cannot load KTX2 textures'); 
                 return; 
             }
 
             const KTX2_BASE = 'files/assets/astc6x6';
-            const SOG_PATTERN = /(means_l|means_u|quats|scales|sh0|shN_centroids|shN_labels)\.webp(\?.*)?$/;
+            const SOG_TEXTURES = ['means_l', 'means_u', 'quats', 'scales', 'sh0', 'shN_centroids', 'shN_labels'];
             
-            // 1) Install load hook to intercept ANY .webp requests and redirect to .ktx2
-            const texHandler = app.loader.getHandler('texture');
-            const origLoad = texHandler.load.bind(texHandler);
-            
-            texHandler.load = function(url, callback, asset) {
-                const urlStr = (typeof url === 'string') ? url : (url?.url || '');
-                const match = urlStr.match(SOG_PATTERN);
-                
-                if (match) {
-                    const stem = match[1];
-                    const newUrl = `${KTX2_BASE}/${stem}.ktx2`;
-                    
-                    // Update asset metadata to match the new URL
-                    if (asset?.file) {
-                        asset.file.url = newUrl;
-                        asset.file.filename = `${stem}.ktx2`;
-                        if (asset.file.hash) asset.file.hash = '';
-                    }
-                    
-                    console.log(`[ASTC] Load hook: redirecting ${stem}.webp -> ${stem}.ktx2`);
-                    return origLoad(newUrl, callback, asset);
-                }
-                
-                return origLoad(url, callback, asset);
-            };
-
-            // 2) Also update asset records upfront (helps preload list)
-            let remapped = 0;
+            // Update all texture assets to use KTX2 files
+            let configured = 0;
             for (const a of app.assets.list()) {
-                if (a.type !== 'texture' || !a.file?.url) continue;
+                if (a.type !== 'texture' || !a.file) continue;
                 
-                const match = a.file.url.match(SOG_PATTERN);
-                if (!match) continue;
+                // Check if this is one of our SOG textures
+                const textureName = SOG_TEXTURES.find(name => 
+                    a.file.filename?.includes(name) || a.name?.includes(name)
+                );
                 
-                const stem = match[1];
-                const newUrl = `${KTX2_BASE}/${stem}.ktx2`;
-                
-                a.file.url = newUrl;
-                a.file.filename = `${stem}.ktx2`;
-                a.loaded = false;
-                a.resource = null;
-                a.preload = true;
-                if (a.file.hash) a.file.hash = '';
-                
-                remapped++;
+                if (textureName) {
+                    const ktx2Url = `${KTX2_BASE}/${textureName}.ktx2`;
+                    
+                    a.file.url = ktx2Url;
+                    a.file.filename = `${textureName}.ktx2`;
+                    a.loaded = false;
+                    a.resource = null;
+                    a.preload = true;
+                    if (a.file.hash) a.file.hash = '';
+                    
+                    configured++;
+                    console.log(`[KTX2] Configured ${textureName} -> ${ktx2Url}`);
+                }
             }
 
-            console.log(`[ASTC] Remapped ${remapped} textures to .ktx2 and installed load hook`);
+            console.log(`[KTX2] Configured ${configured} textures for KTX2 loading`);
+            
+            if (astcOK) {
+                console.log('[KTX2] ✓ ASTC hardware acceleration available');
+            } else {
+                console.log('[KTX2] ⚠ Using software decompression (no ASTC support)');
+            }
         })();
-        // ---- end gate ----
+        // ---- end KTX2 initialization ----
         
         // do the first reflow after a timeout because of
         // iOS showing a squished iframe sometimes
@@ -346,161 +329,33 @@ function configure() {
             window.addEventListener('resize', pcBootstrap.reflowHandler, false);
             window.addEventListener('orientationchange', pcBootstrap.reflowHandler, false);
             
-            // Old remapping code removed - using engineer's solution above
-            /*
-            // ---- KTX2 / ASTC enable + hard remap ----
-            console.log('[KTX2] Starting KTX2 remapping...');
-            console.log('[KTX2] Checking playcanvasCustom exports:', Object.keys(playcanvasCustom).length, 'exports');
-            console.log('[KTX2] playcanvasCustom.Ktx2Parser:', !!playcanvasCustom.Ktx2Parser);
-            console.log('[KTX2] window.pc?.Ktx2Parser:', !!window.pc?.Ktx2Parser);
-            
-            (function installKtx2Remap(app) {
-                const pc = playcanvasCustom; // Use custom engine with KTX2 support
-                const gd = app.graphicsDevice;
-                const gl = gd.gl;
-                
-                console.log('[KTX2] Checking prerequisites...');
-
-                const astcOK = !!(gl.getExtension('WEBGL_compressed_texture_astc') ||
-                                  gl.getExtension('WEBKIT_WEBGL_compressed_texture_astc'));
-
-                // 1) Register KTX2 parser (must exist in your engine build)
-                if (!pc.Ktx2Parser) {
-                    console.warn('[KTX2] pc.Ktx2Parser missing in this engine build. Staying on WebP.');
-                    return;
-                }
-                console.log('[KTX2] pc.Ktx2Parser found, registering...');
-                const texHandler = app.loader.getHandler('texture');
-                const parser = new pc.Ktx2Parser(gd);
-                
-                // Debug what's available
-                console.log('[KTX2] texHandler methods:', Object.keys(texHandler).filter(k => typeof texHandler[k] === 'function'));
-                console.log('[KTX2] texHandler.parsers type:', typeof texHandler.parsers, texHandler.parsers);
-                
-                if (texHandler.addParser && typeof texHandler.addParser === 'function') {
-                    texHandler.addParser(parser);
-                    console.log('[KTX2] Parser added via addParser');
-                } else if (texHandler.parsers && Array.isArray(texHandler.parsers)) {
-                    texHandler.parsers.unshift(parser);
-                    console.log('[KTX2] Parser added via parsers array');
-                } else if (texHandler._parsers && Array.isArray(texHandler._parsers)) {
-                    texHandler._parsers.unshift(parser);
-                    console.log('[KTX2] Parser added via _parsers array');
-                } else {
-                    // Try direct assignment as fallback
-                    console.warn('[KTX2] Standard parser registration failed, attempting direct override');
-                    if (texHandler.parsers) {
-                        texHandler.parsers = [parser];
-                    } else if (texHandler._parsers) {
-                        texHandler._parsers = [parser];
-                    } else {
-                        console.error('[KTX2] Could not add parser - no suitable method found!');
-                        return;
-                    }
-                }
-
-                // DISABLED: Force KTX2 usage even without ASTC support for testing
-                // if (!astcOK) {
-                //     console.warn('[KTX2] No ASTC support on this device. Staying on WebP.');
-                //     return;
-                // }
-                console.warn('[KTX2] ASTC check disabled - forcing KTX2 usage. ASTC support:', astcOK);
-                
-                // Log which path will be used
-                if (astcOK) {
-                    console.log('[KTX2] ✓ NATIVE ASTC: Hardware will decode ASTC directly (fast path)');
-                } else {
-                    console.log('[KTX2] ⚠ FALLBACK: Engine will decompress ASTC to RGBA (slow path)');
-                }
-
-                // 2) Remap: find texture assets by their current filename and swap to .ktx2
-                const KTX2_BASE = 'files/assets/astc6x6';
-                const mapping = new Map([
-                    ['means_l.webp',        `${KTX2_BASE}/means_l.ktx2`],
-                    ['means_u.webp',        `${KTX2_BASE}/means_u.ktx2`],
-                    ['quats.webp',          `${KTX2_BASE}/quats.ktx2`],
-                    ['scales.webp',         `${KTX2_BASE}/scales.ktx2`],
-                    ['sh0.webp',            `${KTX2_BASE}/sh0.ktx2`],
-                    ['shN_centroids.webp',  `${KTX2_BASE}/shN_centroids.ktx2`],
-                    ['shN_labels.webp',     `${KTX2_BASE}/shN_labels.ktx2`],
-                ]);
-
-                // utility: rewrite a texture asset in-place
-                function rewriteAsset(a, newUrl) {
-                    a.file.url = newUrl;
-                    a.file.filename = newUrl.split('/').pop();
-                    a.loaded = false;
-                    a.resource = null;
-                    a.preload = true;
-                    // If your engine caches by 'hash' query, strip it so we don't hit the old URL
-                    if (a.file.hash) a.file.hash = '';
-                }
-
-                // find candidates by filename suffix (works with /id/rev/…/name.webp?t=hash)
-                const texAssets = app.assets.list().filter(a => a.type === 'texture' && a.file && a.file.filename);
-                console.log(`[KTX2] Found ${texAssets.length} texture assets to check`);
-                let count = 0;
-                for (const a of texAssets) {
-                    for (const [from, to] of mapping) {
-                        if (a.file.filename.endsWith(from)) {
-                            console.log(`[KTX2] Remapping: ${a.name} (${a.file.filename}) -> ${to}`);
-                            rewriteAsset(a, to);
-                            count++;
-                            break;
-                        }
-                    }
-                }
-                console.log(`[KTX2] remapped ${count} texture assets to .ktx2`);
-                
-                // Add load event listeners to verify KTX2 loading
-                texAssets.forEach(asset => {
-                    if (asset.file.url.includes('.ktx2')) {
-                        asset.on('load', () => {
-                            console.log(`[KTX2] ✓ Successfully loaded KTX2: ${asset.name} from ${asset.file.url}`);
-                        });
-                        asset.on('error', (err) => {
-                            console.error(`[KTX2] ✗ Failed to load: ${asset.name}`, err);
-                        });
-                    } else if (asset.file.url.includes('.webp')) {
-                        console.warn(`[KTX2] WARNING: Still loading WebP: ${asset.name} from ${asset.file.url}`);
-                    }
-                });
-                
-                // Log final asset URLs to confirm KTX2 usage
-                console.log('[KTX2] Final texture URLs after remapping:');
-                texAssets.forEach(asset => {
-                    if (asset.type === 'texture') {
-                        console.log(`  - ${asset.name}: ${asset.file.url}`);
-                    }
-                });
-            })(app);
-            // ---- end KTX2 / ASTC block ----
-            */
-            
             app.preload(()=>{
-                // --- Ensure 1-level compressed textures are COMPLETE on iOS/Android ---
-                // This MUST happen after preload completes, when resources are loaded
-                (function fixSogTextureSampling() {
-                    const names = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
+                // --- Fix KTX2 texture filters for iOS/Android compatibility ---
+                // KTX2 textures without mipmaps need non-mipmap filters to be "complete"
+                (function fixKtx2TextureFilters() {
+                    const SOG_TEXTURES = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
                     let fixed = 0;
 
                     app.assets.list().forEach(a => {
                         if (a.type !== 'texture' || !a.resource || !a.file?.url) return;
-                        const isSogKtx2 = a.file.url.endsWith('.ktx2') && names.some(n => a.file.url.includes(`/${n}.ktx2`));
-                        if (!isSogKtx2) return;
+                        
+                        // Check if this is a KTX2 SOG texture
+                        const isKtx2Sog = a.file.url.endsWith('.ktx2') && 
+                                          SOG_TEXTURES.some(name => a.file.url.includes(`/${name}.ktx2`));
+                        if (!isKtx2Sog) return;
 
-                        const t = a.resource;
-                        // If there are no mipmaps, never use *MIPMAP* minFilters
-                        t.minFilter = playcanvasCustom.FILTER_NEAREST;   // or FILTER_LINEAR for smoothing
-                        t.magFilter = playcanvasCustom.FILTER_NEAREST;
-                        t.addressU  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
-                        t.addressV  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
-                        t.anisotropy = 1;
-                        t.upload();
+                        const texture = a.resource;
+                        // Use non-mipmap filters for textures without mipmaps
+                        texture.minFilter = playcanvasCustom.FILTER_NEAREST;
+                        texture.magFilter = playcanvasCustom.FILTER_NEAREST;
+                        texture.addressU  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
+                        texture.addressV  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
+                        texture.anisotropy = 1;
+                        texture.upload();
                         fixed++;
                     });
 
-                    console.log(`[ASTC] adjusted filters on ${fixed} textures`);
+                    console.log(`[KTX2] Fixed texture filters on ${fixed} KTX2 textures`);
                 })();
                 
                 app.scenes.loadScene(SCENE_PATH, (err)=>{

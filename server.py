@@ -13,15 +13,13 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def guess_type(self, path):
         mimetype = super().guess_type(path)
         if path.endswith('.mjs'):
-            return 'text/javascript'  # Some browsers prefer text/javascript for modules
+            return 'text/javascript'  # ES modules
         if path.endswith('.js'):
             return 'application/javascript'
         if path.endswith('.json'):
             return 'application/json'
-        if path.endswith('.webp'):
-            return 'image/webp'
         if path.endswith('.ktx2'):
-            return 'image/ktx2'
+            return 'image/ktx2'  # KTX2 compressed textures
         return mimetype
 
 PORT = 9000

@@ -3,6 +3,9 @@ import { FILLMODE_NONE, FILLMODE_KEEP_ASPECT, AppBase, createGraphicsDevice, App
 import { loadModules } from './__modules__.mjs';
 import { PRELOAD_MODULES, ASSET_PREFIX, INPUT_SETTINGS, SCRIPT_PREFIX, SCRIPTS, CONFIG_FILENAME, SCENE_PATH, CONTEXT_OPTIONS } from './__settings__.mjs';
 
+// Set global pc for legacy scripts
+window.pc = playcanvasCustom;
+
 // Shared Lib
 const CANVAS_ID = 'application-canvas';
 // Needed as we will have edge cases for particular versions of iOS
@@ -467,4 +470,3 @@ main();
 // when the module is imported. This depends upon the `app` object being defined.
 // Therefore we must import the loading screen module after the `app` object is defined.
 import('./__loading__.mjs');
-window.pc = playcanvasStable_min;

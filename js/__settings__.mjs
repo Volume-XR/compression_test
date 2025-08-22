@@ -1,4 +1,4 @@
-import { script } from './playcanvas-stable.min.mjs';
+import { script } from 'playcanvas';
 
 const ASSET_PREFIX = "";
 const SCRIPT_PREFIX = "";

@@ -1,4 +1,4 @@
-import { Script, Asset, GSplatSogsResource, Entity, GSplatSogsData } from '../../playcanvas-stable.min.mjs';
+import { Script, Asset, GSplatSogsResource, Entity, GSplatSogsData } from 'playcanvas';
 
 function _define_property(obj, key, value) {
     if (key in obj) {

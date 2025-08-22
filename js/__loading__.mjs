@@ -1,4 +1,4 @@
-import { script } from './playcanvas-stable.min.mjs';
+import { script } from 'playcanvas';
 import { ASSET_PREFIX } from './__settings__.mjs';
 
 script.createLoadingScreen(function(app) {

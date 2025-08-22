@@ -1,4 +1,4 @@
-import { WasmModule, basisInitialize, dracoInitialize } from './playcanvas-stable.min.mjs';
+import { WasmModule, basisInitialize, dracoInitialize } from 'playcanvas';
 
 const loadModules = function(modules, urlPrefix) {
     return new Promise((resolve)=>{

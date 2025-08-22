@@ -262,7 +262,7 @@ function configure() {
             app.setAreaLightLuts(LTC_MAT_1, LTC_MAT_2);
         }
         
-        // ---- ASTC / KTX2 gate + remap (v2.11 handler) ----
+        // ---- ASTC / KTX2 gate + remap with load hook (v2.11 handler) ----
         (function () {
             window.app = app; // for debugging
 
@@ -282,32 +282,57 @@ function configure() {
                 return; 
             }
 
-            // Remap .webp assets coming from config.json to your local .ktx2 files
             const KTX2_BASE = 'files/assets/astc6x6';
+            const SOG_PATTERN = /(means_l|means_u|quats|scales|sh0|shN_centroids|shN_labels)\.webp(\?.*)?$/;
+            
+            // 1) Install load hook to intercept ANY .webp requests and redirect to .ktx2
+            const texHandler = app.loader.getHandler('texture');
+            const origLoad = texHandler.load.bind(texHandler);
+            
+            texHandler.load = function(url, callback, asset) {
+                const urlStr = (typeof url === 'string') ? url : (url?.url || '');
+                const match = urlStr.match(SOG_PATTERN);
+                
+                if (match) {
+                    const stem = match[1];
+                    const newUrl = `${KTX2_BASE}/${stem}.ktx2`;
+                    
+                    // Update asset metadata to match the new URL
+                    if (asset?.file) {
+                        asset.file.url = newUrl;
+                        asset.file.filename = `${stem}.ktx2`;
+                        if (asset.file.hash) asset.file.hash = '';
+                    }
+                    
+                    console.log(`[ASTC] Load hook: redirecting ${stem}.webp -> ${stem}.ktx2`);
+                    return origLoad(newUrl, callback, asset);
+                }
+                
+                return origLoad(url, callback, asset);
+            };
+
+            // 2) Also update asset records upfront (helps preload list)
             let remapped = 0;
-
             for (const a of app.assets.list()) {
-                if (a.type !== 'texture' || !a.file?.filename) continue;
-
-                // match standard SOG plane names
-                const m = a.file.filename.match(/^([A-Za-z0-9_]+)\.webp$/);
-                if (!m) continue;
-
-                const stem = m[1];
+                if (a.type !== 'texture' || !a.file?.url) continue;
+                
+                const match = a.file.url.match(SOG_PATTERN);
+                if (!match) continue;
+                
+                const stem = match[1];
                 const newUrl = `${KTX2_BASE}/${stem}.ktx2`;
-
-                // point the asset at the KTX2 file; TextureHandler will pick its built-in ktx2 parser
+                
                 a.file.url = newUrl;
                 a.file.filename = `${stem}.ktx2`;
                 a.loaded = false;
                 a.resource = null;
                 a.preload = true;
                 if (a.file.hash) a.file.hash = '';
-
+                
                 remapped++;
             }
 
-            console.log(`[ASTC] Remapped ${remapped} textures to .ktx2`);
+            console.log(`[ASTC] Remapped ${remapped} textures to .ktx2 and installed load hook`);
         })();
         // ---- end gate ----
         
@@ -453,35 +478,36 @@ function configure() {
             */
             
             app.preload(()=>{
+                // --- Ensure 1-level compressed textures are COMPLETE on iOS/Android ---
+                // This MUST happen after preload completes, when resources are loaded
+                (function fixSogTextureSampling() {
+                    const names = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
+                    let fixed = 0;
+
+                    app.assets.list().forEach(a => {
+                        if (a.type !== 'texture' || !a.resource || !a.file?.url) return;
+                        const isSogKtx2 = a.file.url.endsWith('.ktx2') && names.some(n => a.file.url.includes(`/${n}.ktx2`));
+                        if (!isSogKtx2) return;
+
+                        const t = a.resource;
+                        // If there are no mipmaps, never use *MIPMAP* minFilters
+                        t.minFilter = playcanvasCustom.FILTER_NEAREST;   // or FILTER_LINEAR for smoothing
+                        t.magFilter = playcanvasCustom.FILTER_NEAREST;
+                        t.addressU  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
+                        t.addressV  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
+                        t.anisotropy = 1;
+                        t.upload();
+                        fixed++;
+                    });
+
+                    console.log(`[ASTC] adjusted filters on ${fixed} textures`);
+                })();
+                
                 app.scenes.loadScene(SCENE_PATH, (err)=>{
                     if (err) {
                         console.error(err);
                         return;
                     }
-                    
-                    // --- Ensure 1-level compressed textures are COMPLETE on iOS/Android ---
-                    (function fixSogTextureSampling() {
-                        const names = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
-                        let fixed = 0;
-
-                        app.assets.list().forEach(a => {
-                            if (a.type !== 'texture' || !a.resource || !a.file?.url) return;
-                            const isSogKtx2 = a.file.url.endsWith('.ktx2') && names.some(n => a.file.url.includes(`/${n}.ktx2`));
-                            if (!isSogKtx2) return;
-
-                            const t = a.resource;
-                            // If there are no mipmaps, never use *MIPMAP* minFilters
-                            t.minFilter = pc.FILTER_NEAREST;   // or pc.FILTER_LINEAR if you want slight smoothing
-                            t.magFilter = pc.FILTER_NEAREST;
-                            t.addressU  = pc.ADDRESS_CLAMP_TO_EDGE;
-                            t.addressV  = pc.ADDRESS_CLAMP_TO_EDGE;
-                            t.anisotropy = 1;
-                            t.upload();
-                            fixed++;
-                        });
-
-                        console.log(`[ASTC] adjusted filters on ${fixed} textures`);
-                    })();
                     
                     app.start();
                 });

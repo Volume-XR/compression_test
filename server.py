@@ -13,7 +13,7 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def guess_type(self, path):
         mimetype = super().guess_type(path)
         if path.endswith('.mjs'):
-            return 'application/javascript'
+            return 'text/javascript'  # Some browsers prefer text/javascript for modules
         if path.endswith('.js'):
             return 'application/javascript'
         if path.endswith('.json'):

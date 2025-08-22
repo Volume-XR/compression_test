@@ -427,23 +427,60 @@ function setupKtx2Remapping(app, device) {
     
     console.log('[KTX2] Parser registered. Parsers available:', texHandler.parsers.length);
     
-    // Override the texture handler's load method to use KTX2 parser for .ktx2 files
+    // Override the texture handler's load method to remap WebP to KTX2
     const originalLoad = texHandler.load.bind(texHandler);
+    let loadCallCount = 0;
     texHandler.load = function(url, callback, asset) {
-        if (url && (url.original || url.load || url).includes('.ktx2')) {
-            console.log('[KTX2] Loading KTX2 file:', url.original || url.load || url);
-            // Use KTX2 parser directly
-            parser.load(url, callback, asset);
-        } else {
-            // Use original loader
-            originalLoad(url, callback, asset);
+        loadCallCount++;
+        console.log(`[KTX2] texHandler.load called (#${loadCallCount}):`, url.original || url.load || url);
+        // Remap WebP URLs to KTX2
+        const remapTable = {
+            'means_l.webp': 'files/assets/astc6x6/means_l.ktx2',
+            'means_u.webp': 'files/assets/astc6x6/means_u.ktx2',
+            'quats.webp': 'files/assets/astc6x6/quats.ktx2',
+            'scales.webp': 'files/assets/astc6x6/scales.ktx2',
+            'sh0.webp': 'files/assets/astc6x6/sh0.ktx2',
+            'shN_centroids.webp': 'files/assets/astc6x6/shN_centroids.ktx2',
+            'shN_labels.webp': 'files/assets/astc6x6/shN_labels.ktx2'
+        };
+        
+        let urlStr = url.original || url.load || url;
+        let remapped = false;
+        
+        for (const [webpName, ktx2Path] of Object.entries(remapTable)) {
+            if (urlStr.includes(webpName)) {
+                // Create new URL object with KTX2 path
+                const newUrl = typeof url === 'object' ? {...url} : ktx2Path;
+                if (typeof newUrl === 'object') {
+                    newUrl.load = ktx2Path;
+                    newUrl.original = ktx2Path;
+                }
+                console.log(`[KTX2] Remapped texture load: ${urlStr} -> ${ktx2Path}`);
+                parser.load(newUrl, callback, asset);
+                remapped = true;
+                break;
+            }
+        }
+        
+        if (!remapped) {
+            if (urlStr.includes('.ktx2')) {
+                console.log('[KTX2] Loading KTX2 file:', urlStr);
+                parser.load(url, callback, asset);
+            } else {
+                originalLoad(url, callback, asset);
+            }
         }
     };
     
     // Hook into the asset registry's add function to remap URLs
     const originalAdd = app.assets.add.bind(app.assets);
+    let addCallCount = 0;
     app.assets.add = function(asset) {
+        addCallCount++;
+        console.log(`[KTX2] app.assets.add called (#${addCallCount}): type=${asset.type}, name=${asset.name}, file=${!!asset.file}`);
+        
         if (asset.type === 'texture' && asset.file) {
+            console.log(`[KTX2] Texture asset detected: ${asset.name}, filename=${asset.file.filename}, url=${asset.file.url}`);
             const remapTable = {
                 'means_l.webp': 'files/assets/astc6x6/means_l.ktx2',
                 'means_u.webp': 'files/assets/astc6x6/means_u.ktx2',

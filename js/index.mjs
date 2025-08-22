@@ -262,91 +262,33 @@ function configure() {
             app.setAreaLightLuts(LTC_MAT_1, LTC_MAT_2);
         }
         
-        // ---- ASTC / KTX2 initialization with load interceptor ----
+        // ---- KTX2 / ASTC verification ----
         (function () {
             window.app = app; // for debugging
 
-            // Device capability (ASTC) - required for KTX2 hardware acceleration
+            // Check device capability for ASTC hardware acceleration
             const gl = app.graphicsDevice.gl;
             const astcOK = !!(gl.getExtension('WEBGL_compressed_texture_astc') ||
                             gl.getExtension('WEBKIT_WEBGL_compressed_texture_astc'));
-            if (!astcOK) { 
-                console.warn('[ASTC] Extension missing - KTX2 will use software decompression (slower)'); 
-            }
-
-            // Parser exists in this engine; required for KTX2
+            
+            // Check KTX2 parser availability
             const pc = playcanvasCustom;
             if (!pc.Ktx2Parser) { 
                 console.error('[KTX2] Ktx2Parser missing in this build - cannot load KTX2 textures'); 
                 return; 
             }
-
-            const KTX2_BASE = 'files/assets/astc6x6';
-            const SOG_TEXTURES = ['means_l', 'means_u', 'quats', 'scales', 'sh0', 'shN_centroids', 'shN_labels'];
             
-            // Install texture load interceptor BEFORE asset configuration
-            // This catches ALL texture load requests and redirects .webp to .ktx2
-            const texHandler = app.loader.getHandler('texture');
-            const origLoad = texHandler.load.bind(texHandler);
-            
-            texHandler.load = function(url, callback, asset) {
-                const urlStr = (typeof url === 'string') ? url : (url?.url || '');
-                
-                // Check if this is a SOG texture that needs redirection
-                for (const textureName of SOG_TEXTURES) {
-                    if (urlStr.includes(`${textureName}.webp`)) {
-                        const ktx2Url = `${KTX2_BASE}/${textureName}.ktx2`;
-                        
-                        // Update asset metadata if present
-                        if (asset?.file) {
-                            asset.file.url = ktx2Url;
-                            asset.file.filename = `${textureName}.ktx2`;
-                            if (asset.file.hash) asset.file.hash = '';
-                        }
-                        
-                        console.log(`[KTX2] Intercepted load: ${textureName}.webp -> ${textureName}.ktx2`);
-                        return origLoad(ktx2Url, callback, asset);
-                    }
-                }
-                
-                // Not a SOG texture, load normally
-                return origLoad(url, callback, asset);
-            };
-            
-            // Update all texture assets to use KTX2 files
-            let configured = 0;
-            for (const a of app.assets.list()) {
-                if (a.type !== 'texture' || !a.file) continue;
-                
-                // Check if this is one of our SOG textures
-                const textureName = SOG_TEXTURES.find(name => 
-                    a.file.filename?.includes(name) || a.name?.includes(name)
-                );
-                
-                if (textureName) {
-                    const ktx2Url = `${KTX2_BASE}/${textureName}.ktx2`;
-                    
-                    a.file.url = ktx2Url;
-                    a.file.filename = `${textureName}.ktx2`;
-                    a.loaded = false;
-                    a.resource = null;
-                    a.preload = true;
-                    if (a.file.hash) a.file.hash = '';
-                    
-                    configured++;
-                    console.log(`[KTX2] Configured ${textureName} -> ${ktx2Url}`);
-                }
-            }
-
-            console.log(`[KTX2] Configured ${configured} textures for KTX2 loading with load interceptor`);
+            // Log KTX2 texture usage (config.json now has KTX2 URLs directly)
+            const textureAssets = app.assets.list().filter(a => a.type === 'texture' && a.file?.url?.includes('.ktx2'));
+            console.log(`[KTX2] Found ${textureAssets.length} KTX2 textures in config`);
             
             if (astcOK) {
-                console.log('[KTX2] ✓ ASTC hardware acceleration available');
+                console.log('[KTX2] ✓ ASTC hardware acceleration available - using fast path');
             } else {
-                console.log('[KTX2] ⚠ Using software decompression (no ASTC support)');
+                console.log('[KTX2] ⚠ No ASTC support - using software decompression (slower)');
             }
         })();
-        // ---- end KTX2 initialization ----
+        // ---- end KTX2 verification ----
         
         // do the first reflow after a timeout because of
         // iOS showing a squished iframe sometimes

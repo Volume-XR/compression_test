@@ -16,6 +16,28 @@ function _define_property(obj, key, value) {
 class Sogs extends Script {
     initialize() {
         console.log('initialize');
+        
+        // Check if all required textures are loaded
+        const requiredTextures = ['means_l', 'means_u', 'quats', 'scales', 'sh0'];
+        const missingTextures = [];
+        
+        for (const texName of requiredTextures) {
+            if (!this[texName] || !this[texName].resource) {
+                missingTextures.push(texName);
+                console.error(`[SOG] Missing texture: ${texName}`);
+            }
+        }
+        
+        if (missingTextures.length > 0) {
+            console.error(`[SOG] Cannot initialize - missing textures: ${missingTextures.join(', ')}`);
+            return;
+        }
+        
+        if (!this.meta || !this.meta.resource) {
+            console.error('[SOG] Cannot initialize - meta.json not loaded');
+            return;
+        }
+        
         const data = new GSplatSogsData();
         data.meta = this.meta.resource;
         data.numSplats = this.meta.resource.means.shape[0];

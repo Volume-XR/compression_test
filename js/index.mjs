@@ -301,33 +301,34 @@ function configure() {
             window.addEventListener('orientationchange', pcBootstrap.reflowHandler, false);
             
             app.preload(()=>{
-                // --- Fix KTX2 texture filters for iOS/Android compatibility ---
-                // KTX2 textures without mipmaps need non-mipmap filters to be "complete"
-                (function fixKtx2TextureFilters() {
-                    const SOG_TEXTURES = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
-                    let fixed = 0;
-
-                    app.assets.list().forEach(a => {
-                        if (a.type !== 'texture' || !a.resource || !a.file?.url) return;
+                // Log what actually loaded
+                console.log('[KTX2] Preload complete. Checking texture status...');
+                
+                const SOG_TEXTURES = ['means_l','means_u','quats','scales','sh0','shN_centroids','shN_labels'];
+                
+                // Check each texture individually
+                SOG_TEXTURES.forEach(name => {
+                    const asset = app.assets.list().find(a => 
+                        a.type === 'texture' && a.file?.url?.includes(`${name}.ktx2`)
+                    );
+                    
+                    if (!asset) {
+                        console.error(`[KTX2] Asset not found: ${name}`);
+                    } else if (!asset.resource) {
+                        console.error(`[KTX2] Asset not loaded: ${name} (URL: ${asset.file.url})`);
+                    } else {
+                        console.log(`[KTX2] ✓ Loaded: ${name}`);
                         
-                        // Check if this is a KTX2 SOG texture
-                        const isKtx2Sog = a.file.url.endsWith('.ktx2') && 
-                                          SOG_TEXTURES.some(name => a.file.url.includes(`/${name}.ktx2`));
-                        if (!isKtx2Sog) return;
-
-                        const texture = a.resource;
-                        // Use non-mipmap filters for textures without mipmaps
+                        // Fix texture filters for loaded textures
+                        const texture = asset.resource;
                         texture.minFilter = playcanvasCustom.FILTER_NEAREST;
                         texture.magFilter = playcanvasCustom.FILTER_NEAREST;
                         texture.addressU  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
                         texture.addressV  = playcanvasCustom.ADDRESS_CLAMP_TO_EDGE;
                         texture.anisotropy = 1;
                         texture.upload();
-                        fixed++;
-                    });
-
-                    console.log(`[KTX2] Fixed texture filters on ${fixed} KTX2 textures`);
-                })();
+                    }
+                });
                 
                 app.scenes.loadScene(SCENE_PATH, (err)=>{
                     if (err) {

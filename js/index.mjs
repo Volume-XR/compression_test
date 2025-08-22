@@ -262,53 +262,53 @@ function configure() {
             app.setAreaLightLuts(LTC_MAT_1, LTC_MAT_2);
         }
         
-        // ---- ASTC / KTX2 gate + automatic remap (from engineer) ----
-        (function enableAstcKtx2(app) {
-            // Expose for debugging
-            window.app = app;
+        // ---- ASTC / KTX2 gate + remap (v2.11 handler) ----
+        (function () {
+            window.app = app; // for debugging
 
-            // 1) Capability guard: engine parser + device extension
-            const pc = playcanvasCustom;
-            if (!pc.Ktx2Parser) {
-                console.warn('[ASTC] pc.Ktx2Parser missing in this engine build. Staying on WebP.');
-                return;
-            }
+            // Device capability (ASTC) – skip remap when unsupported
             const gl = app.graphicsDevice.gl;
             const astcOK = !!(gl.getExtension('WEBGL_compressed_texture_astc') ||
                             gl.getExtension('WEBKIT_WEBGL_compressed_texture_astc'));
-            if (!astcOK) {
-                console.warn('[ASTC] Device lacks ASTC extension. Staying on WebP.');
-                return;
+            if (!astcOK) { 
+                console.warn('[ASTC] ext missing; staying on WebP (or launch your fallback).'); 
+                return; 
             }
 
-            // 2) Register the KTX2 parser (your custom parser includes raw-ASTC fast path)
-            const texHandler = app.loader.getHandler('texture');
-            if (texHandler.addParser) texHandler.addParser(new pc.Ktx2Parser(app.graphicsDevice));
-            else texHandler.parsers.unshift(new pc.Ktx2Parser(app.graphicsDevice));
+            // Parser exists in this engine; no need to add/replace
+            const pc = playcanvasCustom;
+            if (!pc.Ktx2Parser) { 
+                console.warn('[ASTC] Ktx2Parser missing in this build.'); 
+                return; 
+            }
 
-            // 3) Remap all SOG WebP assets by ID -> local KTX2
-            const ID_TO_URL = new Map([
-                [243326064, 'files/assets/astc6x6/means_l.ktx2'],
-                [243326060, 'files/assets/astc6x6/means_u.ktx2'],
-                [243326065, 'files/assets/astc6x6/scales.ktx2'],
-                [243326059, 'files/assets/astc6x6/quats.ktx2'],
-                [243326058, 'files/assets/astc6x6/sh0.ktx2'],
-                [243326063, 'files/assets/astc6x6/shN_labels.ktx2'],
-                [243326202, 'files/assets/astc6x6/shN_centroids.ktx2']
-            ]);
-
+            // Remap .webp assets coming from config.json to your local .ktx2 files
+            const KTX2_BASE = 'files/assets/astc6x6';
             let remapped = 0;
-            ID_TO_URL.forEach((url, id) => {
-                const a = app.assets.get(id);
-                if (!a) { console.warn('Missing asset id', id); return; }
-                a.file.url = url;
-                a.file.filename = url.split('/').pop();
-                a.loaded = false; a.resource = null; a.preload = true;
+
+            for (const a of app.assets.list()) {
+                if (a.type !== 'texture' || !a.file?.filename) continue;
+
+                // match standard SOG plane names
+                const m = a.file.filename.match(/^([A-Za-z0-9_]+)\.webp$/);
+                if (!m) continue;
+
+                const stem = m[1];
+                const newUrl = `${KTX2_BASE}/${stem}.ktx2`;
+
+                // point the asset at the KTX2 file; TextureHandler will pick its built-in ktx2 parser
+                a.file.url = newUrl;
+                a.file.filename = `${stem}.ktx2`;
+                a.loaded = false;
+                a.resource = null;
+                a.preload = true;
                 if (a.file.hash) a.file.hash = '';
+
                 remapped++;
-            });
-            console.log(`[ASTC] Registered KTX2 parser and remapped ${remapped} textures to .ktx2`);
-        })(app);
+            }
+
+            console.log(`[ASTC] Remapped ${remapped} textures to .ktx2`);
+        })();
         // ---- end gate ----
         
         // do the first reflow after a timeout because of

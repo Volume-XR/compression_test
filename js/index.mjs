@@ -6,6 +6,38 @@ import { PRELOAD_MODULES, ASSET_PREFIX, INPUT_SETTINGS, SCRIPT_PREFIX, SCRIPTS, 
 // Set global pc for legacy scripts
 window.pc = playcanvasCustom;
 
+// Debug: Capture all console output for mobile debugging
+window.debugLogs = [];
+const origLog = console.log;
+const origWarn = console.warn;
+const origError = console.error;
+
+console.log = (...args) => {
+    window.debugLogs.push({t: 'log', m: args.map(a => String(a)).join(' ')});
+    origLog(...args);
+};
+console.warn = (...args) => {
+    window.debugLogs.push({t: 'warn', m: args.map(a => String(a)).join(' ')});
+    origWarn(...args);
+};
+console.error = (...args) => {
+    window.debugLogs.push({t: 'error', m: args.map(a => a?.stack || String(a)).join(' ')});
+    origError(...args);
+};
+
+// Export function - call from console: exportDebugLogs()
+window.exportDebugLogs = () => {
+    const text = window.debugLogs.map(l => `[${l.t}] ${l.m}`).join('\n');
+    const blob = new Blob([text], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `debug-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return 'Check downloads folder';
+};
+
 // Shared Lib
 const CANVAS_ID = 'application-canvas';
 // Needed as we will have edge cases for particular versions of iOS
@@ -229,6 +261,56 @@ function configure() {
         if (LTC_MAT_1.length && LTC_MAT_2.length && app.setAreaLightLuts.length === 2) {
             app.setAreaLightLuts(LTC_MAT_1, LTC_MAT_2);
         }
+        
+        // ---- ASTC / KTX2 gate + automatic remap (from engineer) ----
+        (function enableAstcKtx2(app) {
+            // Expose for debugging
+            window.app = app;
+
+            // 1) Capability guard: engine parser + device extension
+            const pc = playcanvasCustom;
+            if (!pc.Ktx2Parser) {
+                console.warn('[ASTC] pc.Ktx2Parser missing in this engine build. Staying on WebP.');
+                return;
+            }
+            const gl = app.graphicsDevice.gl;
+            const astcOK = !!(gl.getExtension('WEBGL_compressed_texture_astc') ||
+                            gl.getExtension('WEBKIT_WEBGL_compressed_texture_astc'));
+            if (!astcOK) {
+                console.warn('[ASTC] Device lacks ASTC extension. Staying on WebP.');
+                return;
+            }
+
+            // 2) Register the KTX2 parser (your custom parser includes raw-ASTC fast path)
+            const texHandler = app.loader.getHandler('texture');
+            if (texHandler.addParser) texHandler.addParser(new pc.Ktx2Parser(app.graphicsDevice));
+            else texHandler.parsers.unshift(new pc.Ktx2Parser(app.graphicsDevice));
+
+            // 3) Remap all SOG WebP assets by ID -> local KTX2
+            const ID_TO_URL = new Map([
+                [243326064, 'files/assets/astc6x6/means_l.ktx2'],
+                [243326060, 'files/assets/astc6x6/means_u.ktx2'],
+                [243326065, 'files/assets/astc6x6/scales.ktx2'],
+                [243326059, 'files/assets/astc6x6/quats.ktx2'],
+                [243326058, 'files/assets/astc6x6/sh0.ktx2'],
+                [243326063, 'files/assets/astc6x6/shN_labels.ktx2'],
+                [243326202, 'files/assets/astc6x6/shN_centroids.ktx2']
+            ]);
+
+            let remapped = 0;
+            ID_TO_URL.forEach((url, id) => {
+                const a = app.assets.get(id);
+                if (!a) { console.warn('Missing asset id', id); return; }
+                a.file.url = url;
+                a.file.filename = url.split('/').pop();
+                a.loaded = false; a.resource = null; a.preload = true;
+                if (a.file.hash) a.file.hash = '';
+                remapped++;
+            });
+            console.log(`[ASTC] Registered KTX2 parser and remapped ${remapped} textures to .ktx2`);
+        })(app);
+        // ---- end gate ----
+        
         // do the first reflow after a timeout because of
         // iOS showing a squished iframe sometimes
         setTimeout(()=>{
@@ -239,8 +321,7 @@ function configure() {
             window.addEventListener('resize', pcBootstrap.reflowHandler, false);
             window.addEventListener('orientationchange', pcBootstrap.reflowHandler, false);
             
-            // KTX2 remapping is now done in setupKtx2Remapping() before configure()
-            // The code below is commented out as it runs too late
+            // Old remapping code removed - using engineer's solution above
             /*
             // ---- KTX2 / ASTC enable + hard remap ----
             console.log('[KTX2] Starting KTX2 remapping...');
@@ -389,136 +470,11 @@ async function main() {
         if (initApp(device)) {
             await loadModules(PRELOAD_MODULES, ASSET_PREFIX);
             
-            // Hook into asset loading BEFORE configure
-            // Setup KTX2 remapping BEFORE configure
-            setupKtx2Remapping(app, device);
-            
             configure();
         }
     } catch (e) {
         console.error('Device creation error:', e);
     }
-}
-
-function setupKtx2Remapping(app, device) {
-    console.log('[KTX2] Setting up asset remapping hook...');
-    
-    const pc = playcanvasCustom;
-    if (!pc.Ktx2Parser) {
-        console.warn('[KTX2] Ktx2Parser not found - WebP will be used');
-        return;
-    }
-    
-    // First, register KTX2 parser BEFORE any hooks
-    const gd = device || app.graphicsDevice;
-    const texHandler = app.loader.getHandler('texture');
-    const parser = new pc.Ktx2Parser(gd);
-    
-    // Force the parser to be first
-    if (!texHandler.parsers) {
-        texHandler.parsers = [];
-    }
-    if (Array.isArray(texHandler.parsers)) {
-        // Remove any existing KTX2 parser
-        texHandler.parsers = texHandler.parsers.filter(p => !(p instanceof pc.Ktx2Parser));
-        // Add our parser first
-        texHandler.parsers.unshift(parser);
-    }
-    
-    console.log('[KTX2] Parser registered. Parsers available:', texHandler.parsers.length);
-    
-    // Override the texture handler's load method to remap WebP to KTX2
-    const originalLoad = texHandler.load.bind(texHandler);
-    let loadCallCount = 0;
-    texHandler.load = function(url, callback, asset) {
-        loadCallCount++;
-        console.log(`[KTX2] texHandler.load called (#${loadCallCount}):`, url.original || url.load || url);
-        // Remap WebP URLs to KTX2
-        const remapTable = {
-            'means_l.webp': 'files/assets/astc6x6/means_l.ktx2',
-            'means_u.webp': 'files/assets/astc6x6/means_u.ktx2',
-            'quats.webp': 'files/assets/astc6x6/quats.ktx2',
-            'scales.webp': 'files/assets/astc6x6/scales.ktx2',
-            'sh0.webp': 'files/assets/astc6x6/sh0.ktx2',
-            'shN_centroids.webp': 'files/assets/astc6x6/shN_centroids.ktx2',
-            'shN_labels.webp': 'files/assets/astc6x6/shN_labels.ktx2'
-        };
-        
-        let urlStr = url.original || url.load || url;
-        let remapped = false;
-        
-        for (const [webpName, ktx2Path] of Object.entries(remapTable)) {
-            if (urlStr.includes(webpName)) {
-                // Create new URL object with KTX2 path
-                const newUrl = typeof url === 'object' ? {...url} : ktx2Path;
-                if (typeof newUrl === 'object') {
-                    newUrl.load = ktx2Path;
-                    newUrl.original = ktx2Path;
-                }
-                console.log(`[KTX2] Remapped texture load: ${urlStr} -> ${ktx2Path}`);
-                parser.load(newUrl, callback, asset);
-                remapped = true;
-                break;
-            }
-        }
-        
-        if (!remapped) {
-            if (urlStr.includes('.ktx2')) {
-                console.log('[KTX2] Loading KTX2 file:', urlStr);
-                parser.load(url, callback, asset);
-            } else {
-                originalLoad(url, callback, asset);
-            }
-        }
-    };
-    
-    // Hook into the asset registry's add function to remap URLs
-    const originalAdd = app.assets.add.bind(app.assets);
-    let addCallCount = 0;
-    app.assets.add = function(asset) {
-        addCallCount++;
-        console.log(`[KTX2] app.assets.add called (#${addCallCount}): type=${asset.type}, name=${asset.name}, file=${!!asset.file}`);
-        
-        if (asset.type === 'texture' && asset.file) {
-            console.log(`[KTX2] Texture asset detected: ${asset.name}, filename=${asset.file.filename}, url=${asset.file.url}`);
-            const remapTable = {
-                'means_l.webp': 'files/assets/astc6x6/means_l.ktx2',
-                'means_u.webp': 'files/assets/astc6x6/means_u.ktx2',
-                'quats.webp': 'files/assets/astc6x6/quats.ktx2',
-                'scales.webp': 'files/assets/astc6x6/scales.ktx2',
-                'sh0.webp': 'files/assets/astc6x6/sh0.ktx2',
-                'shN_centroids.webp': 'files/assets/astc6x6/shN_centroids.ktx2',
-                'shN_labels.webp': 'files/assets/astc6x6/shN_labels.ktx2'
-            };
-            
-            // Check both filename and URL for matches
-            const filename = asset.file.filename || '';
-            const url = asset.file.url || '';
-            
-            for (const [webpName, ktx2Path] of Object.entries(remapTable)) {
-                // Match if the filename ends with the webp name OR the URL contains it
-                if (filename.endsWith(webpName) || url.includes(webpName)) {
-                    console.log(`[KTX2] Remapping ${asset.name} from ${asset.file.url} to ${ktx2Path}`);
-                    
-                    // Update both URL and filename
-                    asset.file.url = ktx2Path;
-                    asset.file.filename = ktx2Path.split('/').pop();
-                    
-                    // Update the load URL if it exists
-                    if (asset.file.urls) {
-                        asset.file.urls = [ktx2Path];
-                    }
-                    
-                    // Clear any cached hash to force reload
-                    if (asset.file.hash) delete asset.file.hash;
-                    break;
-                }
-            }
-        }
-        return originalAdd(asset);
-    };
-    
-    console.log('[KTX2] Parser registered and asset remapping hook installed');
 }
 main();
 // The `pc.script.createLoadingScreen()` in `__loading__.js` is invoked immediately 

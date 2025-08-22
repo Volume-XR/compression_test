@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Console Debug Export</title>
+    <script>
+        // Store all console logs
+        window.debugLogs = [];
+        
+        // Override console methods to capture everything
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            window.debugLogs.push({type: 'log', message: args.join(' '), timestamp: new Date().toISOString()});
+            originalLog.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            window.debugLogs.push({type: 'warn', message: args.join(' '), timestamp: new Date().toISOString()});
+            originalWarn.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            const errorMsg = args.map(arg => {
+                if (arg instanceof Error) {
+                    return arg.stack || arg.message;
+                }
+                return String(arg);
+            }).join(' ');
+            window.debugLogs.push({type: 'error', message: errorMsg, timestamp: new Date().toISOString()});
+            originalError.apply(console, args);
+        };
+        
+        // Function to export logs
+        window.exportLogs = function() {
+            const logText = window.debugLogs.map(log => 
+                `[${log.timestamp}] [${log.type.toUpperCase()}] ${log.message}`
+            ).join('\n');
+            
+            // Create a blob and download link
+            const blob = new Blob([logText], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `console-logs-${new Date().getTime()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            alert('Logs exported! Check your downloads.');
+        };
+        
+        // Also capture unhandled errors
+        window.addEventListener('error', function(e) {
+            window.debugLogs.push({
+                type: 'error',
+                message: `Unhandled error: ${e.message} at ${e.filename}:${e.lineno}:${e.colno}\n${e.error?.stack || ''}`,
+                timestamp: new Date().toISOString()
+            });
+        });
+        
+        window.addEventListener('unhandledrejection', function(e) {
+            window.debugLogs.push({
+                type: 'error', 
+                message: `Unhandled promise rejection: ${e.reason}`,
+                timestamp: new Date().toISOString()
+            });
+        });
+    </script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            margin: 10px;
+        }
+        #logDisplay {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .log-entry { color: #333; }
+        .warn-entry { color: #856404; background: #fff3cd; }
+        .error-entry { color: #721c24; background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>Console Debug Export</h1>
+    <p>This page captures all console output. Load your app in an iframe below, then export the logs.</p>
+    
+    <button onclick="window.exportLogs()">📥 Export Console Logs</button>
+    <button onclick="location.reload()">🔄 Clear & Restart</button>
+    <button onclick="showLogs()">👁 Show Logs Here</button>
+    
+    <div id="logDisplay"></div>
+    
+    <h2>Your App:</h2>
+    <iframe src="index.html" style="width:100%; height:600px; border:1px solid #ccc;"></iframe>
+    
+    <script>
+        function showLogs() {
+            const display = document.getElementById('logDisplay');
+            display.innerHTML = '<h3>Console Logs:</h3>';
+            window.debugLogs.forEach(log => {
+                const div = document.createElement('div');
+                div.className = log.type + '-entry';
+                div.textContent = `[${log.type}] ${log.message}`;
+                display.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>

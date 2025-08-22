@@ -239,6 +239,9 @@ function configure() {
             window.addEventListener('resize', pcBootstrap.reflowHandler, false);
             window.addEventListener('orientationchange', pcBootstrap.reflowHandler, false);
             
+            // KTX2 remapping is now done in setupKtx2Remapping() before configure()
+            // The code below is commented out as it runs too late
+            /*
             // ---- KTX2 / ASTC enable + hard remap ----
             console.log('[KTX2] Starting KTX2 remapping...');
             console.log('[KTX2] Checking playcanvasCustom exports:', Object.keys(playcanvasCustom).length, 'exports');
@@ -366,6 +369,7 @@ function configure() {
                 });
             })(app);
             // ---- end KTX2 / ASTC block ----
+            */
             
             app.preload(()=>{
                 app.scenes.loadScene(SCENE_PATH, (err)=>{
@@ -386,7 +390,8 @@ async function main() {
             await loadModules(PRELOAD_MODULES, ASSET_PREFIX);
             
             // Hook into asset loading BEFORE configure
-            setupKtx2Remapping();
+            // Setup KTX2 remapping BEFORE configure
+            setupKtx2Remapping(app, device);
             
             configure();
         }
@@ -395,7 +400,7 @@ async function main() {
     }
 }
 
-function setupKtx2Remapping() {
+function setupKtx2Remapping(app, device) {
     console.log('[KTX2] Setting up asset remapping hook...');
     
     const pc = playcanvasCustom;
@@ -405,7 +410,7 @@ function setupKtx2Remapping() {
     }
     
     // First, register KTX2 parser BEFORE any hooks
-    const gd = app.graphicsDevice;
+    const gd = device || app.graphicsDevice;
     const texHandler = app.loader.getHandler('texture');
     const parser = new pc.Ktx2Parser(gd);
     
@@ -449,11 +454,24 @@ function setupKtx2Remapping() {
                 'shN_labels.webp': 'files/assets/astc6x6/shN_labels.ktx2'
             };
             
+            // Check both filename and URL for matches
+            const filename = asset.file.filename || '';
+            const url = asset.file.url || '';
+            
             for (const [webpName, ktx2Path] of Object.entries(remapTable)) {
-                if (asset.file.filename === webpName || asset.file.url.includes(webpName)) {
+                // Match if the filename ends with the webp name OR the URL contains it
+                if (filename.endsWith(webpName) || url.includes(webpName)) {
                     console.log(`[KTX2] Remapping ${asset.name} from ${asset.file.url} to ${ktx2Path}`);
+                    
+                    // Update both URL and filename
                     asset.file.url = ktx2Path;
                     asset.file.filename = ktx2Path.split('/').pop();
+                    
+                    // Update the load URL if it exists
+                    if (asset.file.urls) {
+                        asset.file.urls = [ktx2Path];
+                    }
+                    
                     // Clear any cached hash to force reload
                     if (asset.file.hash) delete asset.file.hash;
                     break;

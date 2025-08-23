@@ -290,14 +290,59 @@ function configure() {
             
             // Register parser for .ktx2 extension
             texHandler.parsers['ktx2'] = ktx2Parser;
-            console.log('[KTX2] Parser registered for .ktx2 files');
             
-            // Also set as default parser for KTX2 files
+            // Override the KTX2 parser's load method to ensure binary loading
+            const origOpen = ktx2Parser.open.bind(ktx2Parser);
+            ktx2Parser.open = function(url, data, device) {
+                console.log(`[KTX2] Parser.open called for: ${url}`);
+                
+                // Check if data looks like KTX2
+                if (data instanceof ArrayBuffer) {
+                    const view = new Uint8Array(data, 0, 12);
+                    const identifier = Array.from(view).map(b => b.toString(16).padStart(2, '0')).join(' ').toUpperCase();
+                    console.log(`[KTX2] First 12 bytes: ${identifier}`);
+                    
+                    // KTX2 identifier should be: AB 4B 54 58 20 32 30 BB 0D 0A 1A 0A
+                    const expected = 'AB 4B 54 58 20 32 30 BB 0D 0A 1A 0A';
+                    if (identifier !== expected) {
+                        console.error(`[KTX2] Invalid identifier. Expected: ${expected}`);
+                        console.error(`[KTX2] Data type: ${typeof data}, size: ${data.byteLength} bytes`);
+                    }
+                } else {
+                    console.error(`[KTX2] Data is not ArrayBuffer: ${typeof data}`);
+                }
+                
+                return origOpen(url, data, device);
+            };
+            
+            console.log('[KTX2] Parser registered with debug logging');
+            
+            // Force binary loading for KTX2 files
             const origLoad = texHandler.load.bind(texHandler);
             texHandler.load = function(url, callback, asset) {
                 const urlStr = (typeof url === 'string') ? url : (url?.url || '');
                 if (urlStr.endsWith('.ktx2')) {
-                    console.log(`[KTX2] Loading: ${urlStr}`);
+                    console.log(`[KTX2] Loading as binary: ${urlStr}`);
+                    
+                    // Force binary response type for KTX2 files
+                    if (asset) {
+                        if (!asset.file) asset.file = {};
+                        asset.file.responseType = 'arraybuffer';
+                    }
+                    
+                    // Use custom binary loader for KTX2
+                    app.loader._loadUrl(urlStr, 'arraybuffer', (err, response) => {
+                        if (err) {
+                            console.error(`[KTX2] Failed to load ${urlStr}:`, err);
+                            callback(err);
+                        } else {
+                            console.log(`[KTX2] Loaded ${response.byteLength} bytes for ${urlStr}`);
+                            
+                            // Parse with KTX2 parser directly
+                            ktx2Parser.load(urlStr, response, asset, callback);
+                        }
+                    });
+                    return;
                 }
                 return origLoad(url, callback, asset);
             };

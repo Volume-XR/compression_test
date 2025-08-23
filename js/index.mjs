@@ -262,7 +262,7 @@ function configure() {
             app.setAreaLightLuts(LTC_MAT_1, LTC_MAT_2);
         }
         
-        // ---- KTX2 / ASTC verification ----
+        // ---- KTX2 Parser Registration ----
         (function () {
             window.app = app; // for debugging
 
@@ -278,9 +278,43 @@ function configure() {
                 return; 
             }
             
+            // Register KTX2 parser with the texture handler
+            console.log('[KTX2] Registering KTX2 parser...');
+            const texHandler = app.loader.getHandler('texture');
+            const ktx2Parser = new pc.Ktx2Parser(app.graphicsDevice);
+            
+            // In v2.11, parsers is an object, not an array
+            if (!texHandler.parsers) {
+                texHandler.parsers = {};
+            }
+            
+            // Register parser for .ktx2 extension
+            texHandler.parsers['ktx2'] = ktx2Parser;
+            console.log('[KTX2] Parser registered for .ktx2 files');
+            
+            // Also set as default parser for KTX2 files
+            const origLoad = texHandler.load.bind(texHandler);
+            texHandler.load = function(url, callback, asset) {
+                const urlStr = (typeof url === 'string') ? url : (url?.url || '');
+                if (urlStr.endsWith('.ktx2')) {
+                    console.log(`[KTX2] Loading: ${urlStr}`);
+                }
+                return origLoad(url, callback, asset);
+            };
+            
             // Log KTX2 texture usage (config.json now has KTX2 URLs directly)
             const textureAssets = app.assets.list().filter(a => a.type === 'texture' && a.file?.url?.includes('.ktx2'));
             console.log(`[KTX2] Found ${textureAssets.length} KTX2 textures in config`);
+            
+            // Add load event listeners to track loading
+            textureAssets.forEach(asset => {
+                asset.on('load', () => {
+                    console.log(`[KTX2] ✓ Successfully loaded: ${asset.name}`);
+                });
+                asset.on('error', (err) => {
+                    console.error(`[KTX2] ✗ Failed to load ${asset.name}:`, err);
+                });
+            });
             
             if (astcOK) {
                 console.log('[KTX2] ✓ ASTC hardware acceleration available - using fast path');
@@ -288,7 +322,7 @@ function configure() {
                 console.log('[KTX2] ⚠ No ASTC support - using software decompression (slower)');
             }
         })();
-        // ---- end KTX2 verification ----
+        // ---- end KTX2 Parser Registration ----
         
         // do the first reflow after a timeout because of
         // iOS showing a squished iframe sometimes
